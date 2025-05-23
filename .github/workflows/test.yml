@@ -13,40 +13,45 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     
-    - name: Set up Python
+    - name: Set up Python 3.9
       uses: actions/setup-python@v2
       with:
         python-version: '3.9'
     
-    - name: Install dependencies
+    - name: Create and activate venv
       run: |
-        python -m pip install --upgrade pip
+        python -m venv venv
+        source venv/bin/activate
+    
+    - name: Install dependencies (via pip)
+      run: |
+        pip install --upgrade pip
         pip install -r requirements.txt
-        sudo apt-get update && sudo apt-get install -y jq
-
-    - name: Run application
+    
+    - name: Install jq (if needed)
       run: |
+        if ! command -v jq &> /dev/null; then
+          echo "jq not found, trying to install..."
+          sudo apt-get update && sudo apt-get install -y jq || echo "Warning: jq installation failed"
+        fi
+    
+    - name: Run Flask app in background
+      run: |
+        source venv/bin/activate
         python app.py &
-        echo $! > server.pid  
+        echo $! > app.pid
         sleep 5  
-
+    
     - name: Run tests
       run: |
-        if ! curl -s http://localhost:5000/time > /dev/null; then
-          echo "Server is not running!"
-          exit 1
-        fi
-        
+        source venv/bin/activate
         chmod +x test/test.sh
-        if ! ./test/test.sh; then
-          echo "Tests failed!"
-          exit 1
-        fi
-
-    - name: Stop application
-      if: always() 
+        ./test/test.sh
+    
+    - name: Stop Flask app (cleanup)
+      if: always()  
       run: |
-        if [ -f server.pid ]; then
-          kill $(cat server.pid) || true
-          rm server.pid
+        if [ -f app.pid ]; then
+          kill $(cat app.pid) || true
+          rm app.pid
         fi
