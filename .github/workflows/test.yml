@@ -22,14 +22,31 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        sudo apt-get install jq
+        sudo apt-get update && sudo apt-get install -y jq
 
     - name: Run application
       run: |
         python app.py &
-        sleep 3  # Give the app time to start
+        echo $! > server.pid  
+        sleep 5  
 
     - name: Run tests
       run: |
+        if ! curl -s http://localhost:5000/time > /dev/null; then
+          echo "Server is not running!"
+          exit 1
+        fi
+        
         chmod +x test/test.sh
-        ./test/test.sh
+        if ! ./test/test.sh; then
+          echo "Tests failed!"
+          exit 1
+        fi
+
+    - name: Stop application
+      if: always() 
+      run: |
+        if [ -f server.pid ]; then
+          kill $(cat server.pid) || true
+          rm server.pid
+        fi

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-response=$(curl -s "http://localhost:3030/time")
+response=$(curl -s "http://localhost:5000/time")
 time_value=$(echo $response | jq -r '.time')
 
 if [ -z "$time_value" ] || [ "$time_value" == "null" ]; then
