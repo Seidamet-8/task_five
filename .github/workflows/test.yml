@@ -1,0 +1,64 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ "*" ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  test:
+    runs-on: self-hosted
+    
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        command -v jq || (apt-get update -qq && apt-get install -y -qq jq || echo "jq not installed")
+
+    - name: Cleanup previous processes
+      run: |
+        pkill -9 -f "python app.py" 2>/dev/null || true
+        sleep 1  
+
+    - name: Run Flask app on port 3030
+      run: |
+        python app.py > flask.log 2>&1 &
+        echo $! > server.pid
+        # Ожидание запуска
+        for i in {1..10}; do
+          if grep -q "Running on http://0.0.0.0:3030" flask.log; then
+            echo "Flask started successfully"
+            break
+          fi
+          sleep 1
+        done
+        cat flask.log
+
+    - name: Verify server
+      run: |
+        curl -v --retry 3 --retry-delay 2 --max-time 5 http://localhost:3030/time
+
+    - name: Run tests
+      run: |
+        chmod +x test/test.sh
+        ./test/test.sh
+
+    - name: Stop server
+      if: always()
+      run: |
+        if [ -f server.pid ]; then
+          kill -9 $(cat server.pid) 2>/dev/null || true
+          rm -f server.pid
+        fi
+        pkill -9 -f "python app.py" 2>/dev/null || true
+        echo "Server logs:"
+        cat flask.log || true
